@@ -1,0 +1,75 @@
+name: Deploy Worker
+
+on:
+  push:
+    branches: [ main ]  # adjust
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Wrangler environment (production|staging)"
+        required: true
+        default: "production"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      ENV: ${{ inputs.environment || 'production' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Wrangler
+        run: npm i -g wrangler@3
+
+      - name: Configure Cloudflare credentials
+        run: |
+          echo "account_id = \"${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\"" >> ./wrangler.extras.toml
+        shell: bash
+
+      - name: Merge extra wrangler config (account id)
+        run: |
+          # If you prefer, you can put account_id directly in wrangler.toml.
+          # This step appends it at build time to avoid committing it.
+          cat wrangler.extras.toml >> wrangler.toml || true
+
+      - name: Create D1 (first-time only)
+        if: ${{ false }} # flip to true for the first run, or run manually
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          wrangler d1 create hotdog-db
+
+      - name: Apply migrations
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          # If you use env-specific DBs, add --env $ENV and have env blocks in wrangler.toml
+          wrangler d1 execute hotdog-db --file=./migrations/0001_init.sql
+
+      - name: Push Worker secrets (non-interactive)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        run: |
+          # Pipe the secret values to wrangler so it won't prompt.
+          # Add --env $ENV if you use wrangler environments.
+          if [ -n "$SLACK_SIGNING_SECRET" ]; then
+            echo -n "$SLACK_SIGNING_SECRET" | wrangler secret put SLACK_SIGNING_SECRET --env $ENV --yes
+          fi
+          if [ -n "$SLACK_BOT_TOKEN" ]; then
+            echo -n "$SLACK_BOT_TOKEN" | wrangler secret put SLACK_BOT_TOKEN --env $ENV --yes
+          fi
+
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          wrangler deploy --env $ENV
