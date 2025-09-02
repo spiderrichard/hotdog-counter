@@ -1,13 +1,14 @@
-name: Deploy Worker (no environments)
+name: Deploy Worker (no envs)
 
 on:
   push:
-    branches: [ main ]         # change if needed
+    branches: [ main ]   # ← change if your default branch is different
   workflow_dispatch: {}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,19 +21,25 @@ jobs:
       - name: Install Wrangler v4
         run: npm i -g wrangler@4
 
-      # Optional: first-time only. Leave disabled unless you need it.
-      - name: (Optional) Create D1 database
-        if: ${{ false }}
+      - name: Who am I (debug)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: wrangler d1 create hotdog-db
+        run: wrangler whoami
 
-      - name: Apply migrations to remote D1
+      # Apply migrations to the remote D1 (safe to run every deploy)
+      - name: Apply migrations
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: wrangler d1 execute hotdog-db --file=./migrations/0001_init.sql --remote
 
-      - name: Push Worker secrets (non-interactive)
+      # First deploy creates the Worker script so secrets API will work
+      - name: Deploy (create/update worker)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: wrangler deploy
+
+      # Add secrets to the Worker (non-interactive). Idempotent.
+      - name: Push Worker secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
@@ -52,7 +59,9 @@ jobs:
           put SLACK_SIGNING_SECRET "$SLACK_SIGNING_SECRET"
           put SLACK_BOT_TOKEN "$SLACK_BOT_TOKEN"
 
-      - name: Deploy
+      # (Optional) Redeploy — not strictly required, secrets are live immediately
+      - name: Deploy again (optional)
+        if: always()
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: wrangler deploy
