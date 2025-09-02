@@ -1,26 +1,18 @@
-name: Deploy Worker
+name: Deploy Worker (no environments)
 
 on:
   push:
-    branches: [ main ]  # adjust
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: "Wrangler environment (production|staging)"
-        required: true
-        default: "production"
+    branches: [ main ]         # change if needed
+  workflow_dispatch: {}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    env:
-      ENV: production
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -28,61 +20,39 @@ jobs:
       - name: Install Wrangler v4
         run: npm i -g wrangler@4
 
-      - name: Configure Cloudflare credentials
-        run: |
-          echo "account_id = \"${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\"" >> ./wrangler.extras.toml
-        shell: bash
-
-      - name: Merge extra wrangler config (account id)
-        run: |
-          # If you prefer, you can put account_id directly in wrangler.toml.
-          # This step appends it at build time to avoid committing it.
-          cat wrangler.extras.toml >> wrangler.toml || true
-
-      - name: Create D1 (first-time only)
-        if: ${{ false }} # flip to true for the first run, or run manually
+      # Optional: first-time only. Leave disabled unless you need it.
+      - name: (Optional) Create D1 database
+        if: ${{ false }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          wrangler d1 create hotdog-db
+        run: wrangler d1 create hotdog-db
 
-      - name: Apply migrations
+      - name: Apply migrations to remote D1
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          # If you use env-specific DBs, add --env $ENV and have env blocks in wrangler.toml
-          wrangler d1 execute hotdog-db --file=./migrations/0001_init.sql
+        run: wrangler d1 execute hotdog-db --file=./migrations/0001_init.sql --remote
 
       - name: Push Worker secrets (non-interactive)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          ENV: production            # or staging; must match what you use elsewhere
           SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
         shell: bash
         run: |
           set -e
-
-          # Helper: put secret only if it's not already present (avoids overwrite prompts)
-          put_secret_if_missing () {
-            local key="$1"
-            local val="$2"
-            if [ -z "$val" ]; then
-              echo "Skipping $key (no value provided)."
-              return 0
-            fi
-            if wrangler secret list --env "$ENV" | grep -q "\"name\": \"$key\""; then
+          put () {
+            local key="$1"; local val="$2"
+            [ -z "$val" ] && { echo "Skipping $key (no value)"; return 0; }
+            if wrangler secret list | grep -q "\"name\": \"$key\""; then
               echo "$key already set; skipping."
             else
-              printf '%s' "$val" | wrangler secret put "$key" --env "$ENV"
+              printf '%s' "$val" | wrangler secret put "$key"
             fi
           }
-
-          put_secret_if_missing SLACK_SIGNING_SECRET "$SLACK_SIGNING_SECRET"
-          put_secret_if_missing SLACK_BOT_TOKEN "$SLACK_BOT_TOKEN"
+          put SLACK_SIGNING_SECRET "$SLACK_SIGNING_SECRET"
+          put SLACK_BOT_TOKEN "$SLACK_BOT_TOKEN"
 
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          wrangler deploy --env $ENV
+        run: wrangler deploy
