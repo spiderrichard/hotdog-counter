@@ -1,5 +1,5 @@
 // Hotdog Counter — Slack Events + Slash Command on Cloudflare Workers + D1
-// Counts :hotdog: and the Unicode 🌭 in channel messages and reaction_added events...
+// Counts :hotdog: and the Unicode 🌭 in channel messages and reaction_added events.
 
 export default {
   async fetch(request, env, ctx) {
