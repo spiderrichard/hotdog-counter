@@ -56,17 +56,30 @@ jobs:
       - name: Push Worker secrets (non-interactive)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ENV: production            # or staging; must match what you use elsewhere
           SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        shell: bash
         run: |
-          # Pipe the secret values to wrangler so it won't prompt.
-          # Add --env $ENV if you use wrangler environments.
-          if [ -n "$SLACK_SIGNING_SECRET" ]; then
-            echo -n "$SLACK_SIGNING_SECRET" | wrangler secret put SLACK_SIGNING_SECRET --env $ENV --yes
-          fi
-          if [ -n "$SLACK_BOT_TOKEN" ]; then
-            echo -n "$SLACK_BOT_TOKEN" | wrangler secret put SLACK_BOT_TOKEN --env $ENV --yes
-          fi
+          set -e
+
+          # Helper: put secret only if it's not already present (avoids overwrite prompts)
+          put_secret_if_missing () {
+            local key="$1"
+            local val="$2"
+            if [ -z "$val" ]; then
+              echo "Skipping $key (no value provided)."
+              return 0
+            fi
+            if wrangler secret list --env "$ENV" | grep -q "\"name\": \"$key\""; then
+              echo "$key already set; skipping."
+            else
+              printf '%s' "$val" | wrangler secret put "$key" --env "$ENV"
+            fi
+          }
+
+          put_secret_if_missing SLACK_SIGNING_SECRET "$SLACK_SIGNING_SECRET"
+          put_secret_if_missing SLACK_BOT_TOKEN "$SLACK_BOT_TOKEN"
 
       - name: Deploy
         env:
