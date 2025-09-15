@@ -1,0 +1,53 @@
+:root {
+  --bg: #0b0f14;
+  --card: #121822;
+  --text: #e6edf3;
+  --muted: #9fb2c3;
+  --accent: #ffb703;
+  --good: #31d0aa;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color: var(--text);
+  background: radial-gradient(1000px 600px at 0 -200px, #1b2636 30%, var(--bg) 70%) no-repeat var(--bg);
+}
+
+header { padding: 24px 16px 8px; text-align: center; }
+h1 { margin: 0; font-size: 24px; }
+.subtitle { margin: 4px 0 0; color: var(--muted); }
+
+.controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px 16px;
+}
+
+select, button {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid #223045;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+button { cursor: pointer; }
+
+main { max-width: 720px; margin: 0 auto; padding: 0 16px 32px; }
+.board { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 8px; overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,0.25); }
+.board th, .board td { padding: 10px 12px; border-bottom: 1px solid #223045; }
+.board thead th { text-align: left; font-weight: 600; color: var(--muted); background: #121826; }
+.board tbody tr:last-child td { border-bottom: none; }
+.board td:first-child { width: 56px; color: var(--muted); }
+.board td:last-child { font-weight: 600; color: var(--good); }
+
+.status { text-align: center; color: var(--muted); margin: 12px 0; }
+.totals { text-align: center; margin: 0 0 8px; color: var(--muted); }
+
+footer { text-align: center; color: var(--muted); padding: 24px; }
+

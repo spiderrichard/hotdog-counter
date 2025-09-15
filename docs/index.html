@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hotdog Counter — Leaderboard</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>🌭 Hotdog Counter</h1>
+      <p class="subtitle">Public leaderboard from Cloudflare D1</p>
+    </header>
+
+    <section class="controls">
+      <label for="channelSelect">Channel:</label>
+      <select id="channelSelect"></select>
+      <button id="refreshBtn" title="Refresh">↻</button>
+    </section>
+
+    <main>
+      <div id="status" class="status">Loading…</div>
+      <div id="totals" class="totals"></div>
+      <table id="board" class="board" hidden>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>User</th>
+            <th>Hotdogs</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </main>
+
+    <footer>
+      <small>
+        Data served by your Cloudflare Worker API.
+      </small>
+    </footer>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+  </html>
+

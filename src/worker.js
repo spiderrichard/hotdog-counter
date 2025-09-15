@@ -5,6 +5,24 @@ export default {
   async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
 
+    // CORS preflight for public API
+    if (request.method === "OPTIONS") {
+      return corsPreflight();
+    }
+
+    // Public, read-only API to power a static site (e.g., GitHub Pages)
+    if (request.method === "GET" && pathname === "/api/channels") {
+      return withCORS(await apiListChannels(env));
+    }
+
+    if (request.method === "GET" && pathname === "/api/leaderboard") {
+      const url = new URL(request.url);
+      const channel_id = url.searchParams.get("channel_id");
+      const limit = Math.min(Number(url.searchParams.get("limit") || 10) || 10, 100);
+      if (!channel_id) return withCORS(json({ error: "channel_id is required" }, 400));
+      return withCORS(await apiChannelLeaderboard(env, channel_id, limit));
+    }
+
     if (pathname === "/slack/events") {
       return handleSlackEvents(request, env);
     }
@@ -174,6 +192,52 @@ async function incrementCounts(db, channel_id, user_id, add) {
   `).bind(channel_id, add).run();
 }
 
+/* ===== Public Read-Only API (for static sites) ===== */
+
+async function apiListChannels(env) {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT channel_id, count, updated_at
+       FROM channel_totals
+       ORDER BY count DESC`
+    ).all();
+    return json({ results: rows.results || [] });
+  } catch (e) {
+    console.error("apiListChannels error:", e);
+    return json({ error: "Server error" }, 500);
+  }
+}
+
+async function apiChannelLeaderboard(env, channel_id, limit) {
+  try {
+    const totalRow = await env.DB
+      .prepare("SELECT count, updated_at FROM channel_totals WHERE channel_id = ?")
+      .bind(channel_id)
+      .first();
+
+    const top = await env.DB
+      .prepare(
+        `SELECT user_id, count
+         FROM hotdog_counts
+         WHERE channel_id = ?
+         ORDER BY count DESC
+         LIMIT ?`
+      )
+      .bind(channel_id, limit)
+      .all();
+
+    return json({
+      channel_id,
+      total: totalRow ? totalRow.count : 0,
+      updated_at: totalRow ? totalRow.updated_at : null,
+      top: top.results || []
+    });
+  } catch (e) {
+    console.error("apiChannelLeaderboard error:", e);
+    return json({ error: "Server error" }, 500);
+  }
+}
+
 async function verifySlackSignature(request, signingSecret) {
   try {
     const ts = request.headers.get("X-Slack-Request-Timestamp");
@@ -213,10 +277,10 @@ function timingSafeEqual(a, b) {
   return out === 0;
 }
 
-function json(obj) {
+function json(obj, status = 200, extraHeaders) {
   return new Response(JSON.stringify(obj), {
-    status: 200,
-    headers: { "content-type": "application/json" }
+    status,
+    headers: { "content-type": "application/json", ...(extraHeaders || {}) }
   });
 }
 
@@ -225,5 +289,26 @@ function ephemeral(text) {
   return new Response(JSON.stringify({ response_type: "ephemeral", text }), {
     status: 200,
     headers: { "content-type": "application/json" }
+  });
+}
+
+/* ===== CORS helpers ===== */
+function withCORS(resp) {
+  const headers = new Headers(resp.headers);
+  headers.set("Access-Control-Allow-Origin", "*");
+  headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  headers.set("Access-Control-Allow-Headers", "Content-Type");
+  return new Response(resp.body, { status: resp.status, headers });
+}
+
+function corsPreflight() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Max-Age": "86400"
+    }
   });
 }
